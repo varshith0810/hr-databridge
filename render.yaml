@@ -1,0 +1,39 @@
+services:
+  # ── FastAPI backend ──────────────────────────────────────────────
+  - type: web
+    name: hr-databridge-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hr-databridge-db
+          property: connectionString
+      - key: GREENHOUSE_API_BASE
+        value: https://hr-databridge-mock-greenhouse.onrender.com
+      - key: WORKDAY_API_BASE
+        value: https://hr-databridge-mock-workday.onrender.com
+      - key: PYTHON_VERSION
+        value: "3.12"
+
+  # ── Streamlit dashboard ──────────────────────────────────────────
+  - type: web
+    name: hr-databridge-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run dashboard/app.py --server.address 0.0.0.0 --server.port $PORT
+    envVars:
+      - key: API_BASE
+        fromService:
+          name: hr-databridge-api
+          type: web
+          property: host
+      - key: PYTHON_VERSION
+        value: "3.12"
+
+databases:
+  - name: hr-databridge-db
+    databaseName: hr_databridge
+    user: hr_user
+    plan: free

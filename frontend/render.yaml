@@ -1,0 +1,38 @@
+services:
+  # ── FastAPI backend ──────────────────────────────────────────────
+  - type: web
+    name: hr-databridge-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hr-databridge-db
+          property: connectionString
+      - key: FRONTEND_URL
+        value: https://hr-databridge-frontend.onrender.com
+      - key: PYTHON_VERSION
+        value: "3.12"
+
+  # ── React frontend ───────────────────────────────────────────────
+  - type: web
+    name: hr-databridge-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://hr-databridge-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: hr-databridge-db
+    databaseName: hr_databridge
+    user: hr_user
+    plan: free

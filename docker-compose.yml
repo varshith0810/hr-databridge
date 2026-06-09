@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hr_databridge
+      POSTGRES_USER: hr_user
+      POSTGRES_PASSWORD: hr_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hr_user -d hr_databridge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Mock Greenhouse API server ────────────────────────────────
+  mock-greenhouse:
+    build:
+      context: .
+      dockerfile: mock_servers/Dockerfile.greenhouse
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./mock_servers/data:/app/data
+    command: uvicorn mock_servers.greenhouse_server:app --host 0.0.0.0 --port 8001
+
+  # ─── Mock Workday API server ───────────────────────────────────
+  mock-workday:
+    build:
+      context: .
+      dockerfile: mock_servers/Dockerfile.workday
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./mock_servers/data:/app/data
+    command: uvicorn mock_servers.workday_server:app --host 0.0.0.0 --port 8002
+
+  # ─── FastAPI backend ───────────────────────────────────────────
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://hr_user:hr_pass@postgres:5432/hr_databridge
+      GREENHOUSE_API_BASE: http://mock-greenhouse:8001
+      WORKDAY_API_BASE: http://mock-workday:8002
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ─── Streamlit dashboard ───────────────────────────────────────
+  dashboard:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      API_BASE: http://api:8000
+    depends_on:
+      - api
+    command: streamlit run dashboard/app.py --server.address 0.0.0.0
+
+volumes:
+  pgdata:
