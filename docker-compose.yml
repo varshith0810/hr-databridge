@@ -1,7 +1,6 @@
 version: "3.9"
 
 services:
-  # ─── PostgreSQL ────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
@@ -18,52 +17,35 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── Mock Greenhouse API server ────────────────────────────────
-  mock-greenhouse:
-    build:
-      context: .
-      dockerfile: mock_servers/Dockerfile.greenhouse
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./mock_servers/data:/app/data
-    command: uvicorn mock_servers.greenhouse_server:app --host 0.0.0.0 --port 8001
-
-  # ─── Mock Workday API server ───────────────────────────────────
-  mock-workday:
-    build:
-      context: .
-      dockerfile: mock_servers/Dockerfile.workday
-    ports:
-      - "8002:8002"
-    volumes:
-      - ./mock_servers/data:/app/data
-    command: uvicorn mock_servers.workday_server:app --host 0.0.0.0 --port 8002
-
-  # ─── FastAPI backend ───────────────────────────────────────────
   api:
-    build: .
+    build:
+      context: ./backend
     ports:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql://hr_user:hr_pass@postgres:5432/hr_databridge
-      GREENHOUSE_API_BASE: http://mock-greenhouse:8001
-      WORKDAY_API_BASE: http://mock-workday:8002
+      GREENHOUSE_API_BASE: http://host.docker.internal:8001
+      WORKDAY_API_BASE: http://host.docker.internal:8002
+      FRONTEND_URL: http://localhost:5173
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./backend:/app
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # ─── Streamlit dashboard ───────────────────────────────────────
-  dashboard:
-    build: .
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
     ports:
-      - "8501:8501"
+      - "5173:5173"
     environment:
-      API_BASE: http://api:8000
+      VITE_API_BASE: http://localhost:8000
     depends_on:
       - api
-    command: streamlit run dashboard/app.py --server.address 0.0.0.0
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
 
 volumes:
   pgdata:
